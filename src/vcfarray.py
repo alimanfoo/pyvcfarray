@@ -1,4 +1,4 @@
-VERSION = '0.3'
+VERSION = '0.4'
 
 
 import vcf
@@ -45,7 +45,9 @@ DEFAULT_VARIANT_ATTRIBUTE_DTYPES = {'CHROM': 'a20',
                                     'is_snp': 'b1', 
                                     'is_indel': 'b1', 
                                     'is_deletion': 'b1', 
-                                    'is_transition': 'b1'}
+                                    'is_transition': 'b1',
+                                    'num_called': 'i4',
+                                    'num_unknown': 'i4',}
 
 
 def fromvcfinfo(filename, fields=None, types=None, arities=None, fillvalues=None, converters=None):
@@ -171,28 +173,35 @@ def _mkival(rec, f, num, fill, conv):
         elif val is None:
             val = fill
     elif f in rec.INFO:
-        val = rec.INFO[f]
-        if conv is not None: # user-provided value converter, overrides everything else
-            val = conv(val)
-        elif num > 1:
-            if isinstance(val, basestring) and ',' in val:
-                val = val.split(',')
-            if val is not None:
-                val = tuple(val[:num]) # try to pick off as many values as requested
-            else:
-                val = tuple([fill] * num)
-        elif isinstance(val, (list, tuple)) and len(val) > 0:
-            val = val[0] # fall back to picking off first value
-        elif isinstance(val, (list, tuple)) and len(val) == 0:
-            # edge case
-            val = fill
-        elif val is None:
-            val = fill
-        else:
-            pass # leave val as-is
+        val = _mkval(rec.INFO[f], num, fill, conv)
     else:
         val = fill
-    return val    
+    return val   
+
+
+def _mkval(val, num, fill, conv): 
+    if conv is not None: # user-provided value converter, overrides everything else
+        val = conv(val)
+    elif num > 1:
+        if isinstance(val, basestring) and ',' in val:
+            val = val.split(',')
+        if val is not None:
+            if len(val) >= num:
+                val = tuple(val[:num]) # pick off as many values as requested
+            else:
+                val = tuple(list(val) + [fill] * (num-len(val))) # fill in any missing
+        else:
+            val = tuple([fill] * num)
+    elif isinstance(val, (list, tuple)) and len(val) > 0:
+        val = val[0] # fall back to picking off first value
+    elif isinstance(val, (list, tuple)) and len(val) == 0:
+        # edge case
+        val = fill
+    elif val is None:
+        val = fill
+    else:
+        pass # leave val as-is
+    return val
 
 
 def fromvcfcalldata(filename, samples=None, fields=None, types=None, arities=None, fillvalues=None, converters=None):   
@@ -312,30 +321,7 @@ def _itervcfcalldata(vcf_reader, samples, fields, arities, fillvalues, converter
     
     
 def _mkcvals(call, fields, arities, fillvalues, converters):
-    return tuple(_mkcval(call, f, arities[f], fillvalues[f], converters[f]) for f in fields)
-
-
-def _mkcval(call, f, num, fill, conv):
-    val = call[f]
-    if conv is not None: # user-provided value converter, overrides everything else
-        val = conv(val)
-    elif num > 1:
-        if isinstance(val, basestring) and ',' in val:
-            val = val.split(',')
-        if val is not None:
-            val = tuple(val[:num]) # try to pick off as many values as requested
-        else:
-            val = tuple([fill] * num)
-    elif isinstance(val, (list, tuple)) and len(val) > 0:
-        val = val[0] # fall back to picking off first value
-    elif isinstance(val, (list, tuple)) and len(val) == 0:
-        # edge case
-        val = fill
-    elif val is None:
-        val = fill
-    else:
-        pass # leave val as-is
-    return val
+    return tuple(_mkval(call[f], arities[f], fillvalues[f], converters[f]) for f in fields)
 
 
 def view2d(a):
