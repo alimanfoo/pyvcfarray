@@ -329,8 +329,8 @@ def _mkcval(call, f, num, fill, conv):
 
 def view2d(a):
     """
-    Utility function to view a structured array where all fields have a uniform dtype 
-    (e.g., an array constructed by :func:fromvcfcalldata) into a 2D array.
+    Utility function to view a structured 1D array where all fields have a uniform dtype 
+    (e.g., an array constructed by :func:fromvcfcalldata) as a 2D array.
     
     """
     
