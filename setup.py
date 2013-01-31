@@ -2,7 +2,7 @@ from ast import literal_eval
 from distutils.core import setup
 
 
-def get_version(source='vcfarray.py'):
+def get_version(source='src/vcfarray.py'):
     with open(source) as f:
         for line in f:
             if line.startswith('VERSION'):
@@ -15,6 +15,7 @@ setup(
     version=get_version(),
     author='Alistair Miles',
     author_email='alimanfoo@googlemail.com',
+    package_dir={'': 'src'},
     py_modules=['vcfarray'],
     url='https://github.com/alimanfoo/pyvcfarray',
     license='MIT License',
