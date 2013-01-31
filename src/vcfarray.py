@@ -1,4 +1,4 @@
-VERSION = '0.1'
+VERSION = '0.2'
 
 
 import vcf
@@ -255,12 +255,13 @@ def fromvcfcalldata(filename, samples=None, fields=None, types=None, arities=Non
     if arities is None:
         arities = dict()
     for f in fields:
-        vcf_n = vcf_reader.formats[f].num
-        if vcf_n > 1:
-            n = vcf_n
-        else:
-            n = 1 # fall back to expecting one value
-        arities[f] = n
+        if f not in arities:
+            vcf_n = vcf_reader.formats[f].num
+            if vcf_n > 1:
+                n = vcf_n
+            else:
+                n = 1 # fall back to expecting one value
+            arities[f] = n
     
     # decide what fill values to use for each field if value is missing
     if fillvalues is None:
