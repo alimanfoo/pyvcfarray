@@ -1,4 +1,4 @@
-VERSION = '0.2'
+VERSION = '0.3'
 
 
 import vcf
@@ -177,11 +177,16 @@ def _mkival(rec, f, num, fill, conv):
         elif num > 1:
             if isinstance(val, basestring) and ',' in val:
                 val = val.split(',')
-            val = tuple(val[:num]) # try to pick off as many values as requested
+            if val is not None:
+                val = tuple(val[:num]) # try to pick off as many values as requested
+            else:
+                val = tuple([fill] * num)
         elif isinstance(val, (list, tuple)) and len(val) > 0:
             val = val[0] # fall back to picking off first value
         elif isinstance(val, (list, tuple)) and len(val) == 0:
             # edge case
+            val = fill
+        elif val is None:
             val = fill
         else:
             pass # leave val as-is
@@ -317,7 +322,10 @@ def _mkcval(call, f, num, fill, conv):
     elif num > 1:
         if isinstance(val, basestring) and ',' in val:
             val = val.split(',')
-        val = tuple(val[:num]) # try to pick off as many values as requested
+        if val is not None:
+            val = tuple(val[:num]) # try to pick off as many values as requested
+        else:
+            val = tuple([fill] * num)
     elif isinstance(val, (list, tuple)) and len(val) > 0:
         val = val[0] # fall back to picking off first value
     elif isinstance(val, (list, tuple)) and len(val) == 0:
@@ -325,6 +333,8 @@ def _mkcval(call, f, num, fill, conv):
         val = fill
     elif val is None:
         val = fill
+    else:
+        pass # leave val as-is
     return val
 
 
