@@ -1,4 +1,4 @@
-VERSION = 0.1
+VERSION = '0.1'
 
 
 import vcf
@@ -50,23 +50,31 @@ DEFAULT_VARIANT_ATTRIBUTE_DTYPES = {'CHROM': 'a20',
 
 def fromvcfinfo(filename, fields=None, types=None, arities=None, fillvalues=None, converters=None):
     """
-    Load a numpy structured array from data in the fixed and INFO fields of a Variant Call Format (VCF) file.
+    Load a numpy structured array from data in the fixed and INFO
+    fields of a Variant Call Format (VCF) file.
     
-    If just the filename is given, then all fixed and INFO fields will be loaded.
+    If just the filename is given, then all fixed and INFO fields will
+    be loaded.
     
-    To only extract specific fields, provide a sequence of strings as the `fields` keyword argument.
+    To only extract specific fields, provide a sequence of strings as
+    the `fields` keyword argument.
     
-    To override the default numpy dtype for one or more fields, provide a dict as the `types` keyword argument
-    mapping field names to numpy dtype specifications.
+    To override the default numpy dtype for one or more fields,
+    provide a dict as the `types` keyword argument mapping field names
+    to numpy dtype specifications.
     
-    To override the default arity (i.e., number of expected values) for one or more fields, provide a dict
-    as the `arities` keyword argument mapping field names to integers.
+    To override the default arity (i.e., number of expected values)
+    for one or more fields, provide a dict as the `arities` keyword
+    argument mapping field names to integers.
     
-    To override the default fill value to use when a value is missing or None, provide a dict as the
-    `fillvalues` keyword argument mapping field names to fill values.
+    To override the default fill value to use when a value is missing
+    or None, provide a dict as the `fillvalues` keyword argument
+    mapping field names to fill values.
     
-    To injection functions for preprocessing values from specific fields before loading into the array,
-    provide a dict as the `converters` keyword argument mapping field names to functions.
+    To inject functions for preprocessing values from specific
+    fields before loading into the array, provide a dict as the
+    `converters` keyword argument mapping field names to functions.
+
     """
 
     # set up VCF reader
@@ -184,25 +192,34 @@ def _mkival(rec, f, num, fill, conv):
 
 def fromvcfcalldata(filename, samples=None, fields=None, types=None, arities=None, fillvalues=None, converters=None):   
     """
-    Load a numpy structured array from data in the sample columns of a Variant Call Format (VCF) file.
+    Load a numpy structured array from data in the sample columns of a
+    Variant Call Format (VCF) file.
     
-    If just the filename is given, then all FORMAT fields for all samples will be loaded.
+    If just the filename is given, then all FORMAT fields for all
+    samples will be loaded.
    
-    To only extract data for specific samples, provide a sequence of strings as the `samples` keyword argument.
+    To only extract data for specific samples, provide a sequence of
+    strings as the `samples` keyword argument.
     
-    To only extract specific fields, provide a sequence of strings as the `fields` keyword argument.
+    To only extract specific fields, provide a sequence of strings as
+    the `fields` keyword argument.
     
-    To override the default numpy dtype for one or more fields, provide a dict as the `types` keyword argument
-    mapping field names to numpy dtype specifications.
+    To override the default numpy dtype for one or more fields,
+    provide a dict as the `types` keyword argument mapping field names
+    to numpy dtype specifications.
     
-    To override the default arity (i.e., number of expected values) for one or more fields, provide a dict
-    as the `arities` keyword argument mapping field names to integers.
+    To override the default arity (i.e., number of expected values)
+    for one or more fields, provide a dict as the `arities` keyword
+    argument mapping field names to integers.
     
-    To override the default fill value to use when a value is missing or None, provide a dict as the
-    `fillvalues` keyword argument mapping field names to fill values.
+    To override the default fill value to use when a value is missing
+    or None, provide a dict as the `fillvalues` keyword argument
+    mapping field names to fill values.
     
-    To injection functions for preprocessing values from specific fields before loading into the array,
-    provide a dict as the `converters` keyword argument mapping field names to functions.
+    To inject functions for preprocessing values from specific
+    fields before loading into the array, provide a dict as the
+    `converters` keyword argument mapping field names to functions.
+
     """
     
     # set up VCF reader
@@ -323,5 +340,3 @@ def view2d(a):
     b = a.view(dtype).reshape(rows, cols)
     return b
     
-    
- 
