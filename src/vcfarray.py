@@ -49,6 +49,25 @@ DEFAULT_VARIANT_ATTRIBUTE_DTYPES = {'CHROM': 'a20',
 
 
 def fromvcfinfo(filename, fields=None, types=None, arities=None, fillvalues=None, converters=None):
+    """
+    Load a numpy structured array from data in the fixed and INFO fields of a Variant Call Format (VCF) file.
+    
+    If just the filename is given, then all fixed and INFO fields will be loaded.
+    
+    To only extract specific fields, provide a sequence of strings as the `fields` keyword argument.
+    
+    To override the default numpy dtype for one or more fields, provide a dict as the `types` keyword argument
+    mapping field names to numpy dtype specifications.
+    
+    To override the default arity (i.e., number of expected values) for one or more fields, provide a dict
+    as the `arities` keyword argument mapping field names to integers.
+    
+    To override the default fill value to use when a value is missing or None, provide a dict as the
+    `fillvalues` keyword argument mapping field names to fill values.
+    
+    To injection functions for preprocessing values from specific fields before loading into the array,
+    provide a dict as the `converters` keyword argument mapping field names to functions.
+    """
 
     # set up VCF reader
     vcf_reader = vcf.Reader(filename=filename)
@@ -120,18 +139,17 @@ def fromvcfinfo(filename, fields=None, types=None, arities=None, fillvalues=None
             dtype.append((f, t, (n,)))
     
     # set up an iterator over the VCF records
-    it = itervcfinfo(vcf_reader, fields, arities, fillvalues, converters)
+    it = _itervcfinfo(vcf_reader, fields, arities, fillvalues, converters)
 
     # build an array from the iterator
-    a = np.fromiter(it, dtype=dtype).view(np.recarray)
+    a = np.fromiter(it, dtype=dtype)
 
     return a
 
 
-def itervcfinfo(vcf_reader, fields, arities, fillvalues, converters):
+def _itervcfinfo(vcf_reader, fields, arities, fillvalues, converters):
     for rec in vcf_reader:
-        out = tuple(_mkival(rec, f, arities[f], fillvalues[f], converters[f]) for f in fields)
-        yield out
+        yield tuple(_mkival(rec, f, arities[f], fillvalues[f], converters[f]) for f in fields)
 
 
 def _mkival(rec, f, num, fill, conv):
@@ -144,9 +162,7 @@ def _mkival(rec, f, num, fill, conv):
             val = ','.join(map(str, val))
         elif val is None:
             val = fill
-    elif f not in rec.INFO:
-        val = fill
-    else:
+    elif f in rec.INFO:
         val = rec.INFO[f]
         if conv is not None: # user-provided value converter, overrides everything else
             val = conv(val)
@@ -157,8 +173,155 @@ def _mkival(rec, f, num, fill, conv):
         elif isinstance(val, (list, tuple)) and len(val) > 0:
             val = val[0] # fall back to picking off first value
         elif isinstance(val, (list, tuple)) and len(val) == 0:
+            # edge case
             val = fill
         else:
             pass # leave val as-is
+    else:
+        val = fill
     return val    
+
+
+def fromvcfcalldata(filename, samples=None, fields=None, types=None, arities=None, fillvalues=None, converters=None):   
+    """
+    Load a numpy structured array from data in the sample columns of a Variant Call Format (VCF) file.
     
+    If just the filename is given, then all FORMAT fields for all samples will be loaded.
+   
+    To only extract data for specific samples, provide a sequence of strings as the `samples` keyword argument.
+    
+    To only extract specific fields, provide a sequence of strings as the `fields` keyword argument.
+    
+    To override the default numpy dtype for one or more fields, provide a dict as the `types` keyword argument
+    mapping field names to numpy dtype specifications.
+    
+    To override the default arity (i.e., number of expected values) for one or more fields, provide a dict
+    as the `arities` keyword argument mapping field names to integers.
+    
+    To override the default fill value to use when a value is missing or None, provide a dict as the
+    `fillvalues` keyword argument mapping field names to fill values.
+    
+    To injection functions for preprocessing values from specific fields before loading into the array,
+    provide a dict as the `converters` keyword argument mapping field names to functions.
+    """
+    
+    # set up VCF reader
+    vcf_reader = vcf.Reader(filename=filename)
+    
+    # determine samples to extract calldata for
+    if samples is None:
+        samples = vcf_reader.samples
+    else:
+        # check all requested samples are available
+        for s in samples:
+            assert s in vcf_reader.samples, 'bad sample: %s' % s
+
+    # determine fields to use
+    if fields is None:
+        # use all format fields
+        fields = list(vcf_reader.formats.keys())
+    else:
+        # check all requested fields are available
+        for f in fields:
+            assert f in vcf_reader.formats.keys(), 'bad field name: %s' % f
+        
+    # determine a numpy dtype to use for each field
+    if types is None:
+        types = dict()
+    for f in fields:
+        if f not in types:
+            vcf_t = vcf_reader.formats[f].type
+            t = DEFAULT_DTYPES[vcf_t]
+            types[f] = t
+    
+    # determine expected arity for each field
+    if arities is None:
+        arities = dict()
+    for f in fields:
+        vcf_n = vcf_reader.formats[f].num
+        if vcf_n > 1:
+            n = vcf_n
+        else:
+            n = 1 # fall back to expecting one value
+        arities[f] = n
+    
+    # decide what fill values to use for each field if value is missing
+    if fillvalues is None:
+        fillvalues = dict()
+    for f in fields:
+        if f not in fillvalues:
+            vcf_t = vcf_reader.formats[f].type
+            v = DEFAULT_FILLVALUES[vcf_t]
+            fillvalues[f] = v
+            
+    # pad out converters
+    if converters is None:
+        converters = dict()
+    for f in fields:
+        if f not in converters:
+            converters[f] = None
+            
+    # construct a numpy dtype for calldata cells
+    cell_dtype = list()
+    for f in fields:
+        t = types[f]
+        n = arities[f]
+        if n == 1:
+            cell_dtype.append((f, t))
+        else:
+            cell_dtype.append((f, t, (n,)))
+            
+    # construct a numpy dtype for structured array
+    dtype = [(s, cell_dtype) for s in samples]
+    
+    # set up iterator
+    it = _itervcfcalldata(vcf_reader, samples, fields, arities, fillvalues, converters)
+
+    # build an array from the iterator
+    a = np.fromiter(it, dtype=dtype)
+
+    return a
+
+
+def _itervcfcalldata(vcf_reader, samples, fields, arities, fillvalues, converters):
+    for rec in vcf_reader:
+        yield tuple(_mkcvals(rec.genotype(s), fields, arities, fillvalues, converters) for s in samples)
+    
+    
+def _mkcvals(call, fields, arities, fillvalues, converters):
+    return tuple(_mkcval(call, f, arities[f], fillvalues[f], converters[f]) for f in fields)
+
+
+def _mkcval(call, f, num, fill, conv):
+    val = call[f]
+    if conv is not None: # user-provided value converter, overrides everything else
+        val = conv(val)
+    elif num > 1:
+        if isinstance(val, basestring) and ',' in val:
+            val = val.split(',')
+        val = tuple(val[:num]) # try to pick off as many values as requested
+    elif isinstance(val, (list, tuple)) and len(val) > 0:
+        val = val[0] # fall back to picking off first value
+    elif isinstance(val, (list, tuple)) and len(val) == 0:
+        # edge case
+        val = fill
+    elif val is None:
+        val = fill
+    return val
+
+
+def view2d(a):
+    """
+    Utility function to view a structured array where all fields have a uniform dtype 
+    (e.g., an array constructed by :func:fromvcfcalldata) into a 2D array.
+    
+    """
+    
+    rows = a.size
+    cols = len(a.dtype)
+    dtype = a.dtype[0]
+    b = a.view(dtype).reshape(rows, cols)
+    return b
+    
+    
+ 
