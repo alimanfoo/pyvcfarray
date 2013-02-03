@@ -47,7 +47,19 @@ DEFAULT_VARIANT_ATTRIBUTE_DTYPES = {'CHROM': 'a20',
                                     'is_deletion': 'b1', 
                                     'is_transition': 'b1',
                                     'num_called': 'i4',
-                                    'num_unknown': 'i4',}
+                                    'num_unknown': 'i4',
+                                    'call_rate': 'f4',}
+
+
+# special variant attributes - not present in INFO or on PyVCF Record
+SPECIAL_VARIANT_ATTRIBUTES = {
+    'num_alleles': {
+        'dtype': 'u1',
+        'arity': 1,
+        'getter': lambda rec: len(rec.alleles),
+        'fillvalue': 0
+        }
+    }
 
 
 def fromvcfinfo(filename, fields=None, types=None, arities=None, fillvalues=None, converters=None):
@@ -88,10 +100,12 @@ def fromvcfinfo(filename, fields=None, types=None, arities=None, fillvalues=None
         fields = list(VARIANT_ATTRIBUTES)
         # add in all INFO fields declared in VCF header
         fields.extend(vcf_reader.infos.keys())
+        # add all special variant attributes
+        fields.extend(SPECIAL_VARIANT_ATTRIBUTES.keys())
     else:
         # check all requested fields are available
         for f in fields:
-            assert f in VARIANT_ATTRIBUTES or f in vcf_reader.infos.keys(), 'bad field name: %s' % f
+            assert f in VARIANT_ATTRIBUTES or f in vcf_reader.infos.keys() or f in SPECIAL_VARIANT_ATTRIBUTES.keys(), 'bad field name: %s' % f
         
     # determine a numpy dtype to use for each field
     if types is None:
@@ -100,23 +114,34 @@ def fromvcfinfo(filename, fields=None, types=None, arities=None, fillvalues=None
         if f not in types:
             if f in VARIANT_ATTRIBUTES:
                 t = DEFAULT_VARIANT_ATTRIBUTE_DTYPES[f]
-            else:
+            elif f in vcf_reader.infos:
                 vcf_t = vcf_reader.infos[f].type
                 t = DEFAULT_DTYPES[vcf_t]
+            elif f in SPECIAL_VARIANT_ATTRIBUTES:
+                t = SPECIAL_VARIANT_ATTRIBUTES[f]['dtype']
+            else:
+                # should never be reached
+                raise Exception('could not determine dtype for field: %s' % f)
             types[f] = t
     
     # determine expected arity for each field
     if arities is None:
         arities = dict()
     for f in fields:
-        if f in VARIANT_ATTRIBUTES:
-            arities[f] = 1 # expect only one value
-        elif f not in arities:
-            vcf_n = vcf_reader.infos[f].num
-            if vcf_n > 1:
-                n = vcf_n
+        if f not in arities:
+            if f in VARIANT_ATTRIBUTES:
+                arities[f] = 1 # expect only one value
+            elif f in vcf_reader.infos:
+                vcf_n = vcf_reader.infos[f].num
+                if vcf_n > 1:
+                    n = vcf_n
+                else:
+                    n = 1 # fall back to expecting one value
+            elif f in SPECIAL_VARIANT_ATTRIBUTES:
+                n = SPECIAL_VARIANT_ATTRIBUTES[f]['arity']
             else:
-                n = 1 # fall back to expecting one value
+                # should never be reached
+                raise Exception('could not determine arity for field: %s' % f)
             arities[f] = n
     
     # decide what fill values to use for each INFO field if value is missing
@@ -125,10 +150,15 @@ def fromvcfinfo(filename, fields=None, types=None, arities=None, fillvalues=None
     for f in fields:
         if f not in fillvalues:
             if f in VARIANT_ATTRIBUTES:
-                v = '' # should only apply to ID
-            else:
+                v = '' # should only apply to ID, other fixed fields are required
+            elif f in vcf_reader.infos:
                 vcf_t = vcf_reader.infos[f].type
                 v = DEFAULT_FILLVALUES[vcf_t]
+            elif f in SPECIAL_VARIANT_ATTRIBUTES:
+                v = SPECIAL_VARIANT_ATTRIBUTES[f]['fillvalue']
+            else:
+                # should never be reached
+                raise Exception('could not determine fill value for field: %s' % f)
             fillvalues[f] = v
             
     # pad out converters
@@ -174,6 +204,8 @@ def _mkival(rec, f, num, fill, conv):
             val = fill
     elif f in rec.INFO:
         val = _mkval(rec.INFO[f], num, fill, conv)
+    elif f in SPECIAL_VARIANT_ATTRIBUTES:
+        val = _mkval(SPECIAL_VARIANT_ATTRIBUTES[f]['getter'](rec), num, fill, conv) 
     else:
         val = fill
     return val   
