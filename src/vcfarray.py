@@ -1,8 +1,10 @@
-VERSION = '0.5'
+VERSION = '0.6'
 
 
 import vcf
 import numpy as np
+import logging
+logging.basicConfig(format='%(asctime)s %(message)s')
 
 
 # VCF types
@@ -74,7 +76,7 @@ DEFAULT_CALL_ATTRIBUTE_DTYPES = {'called': 'b1',
                                  'is_variant': 'b1'}
 
 
-def fromvcfinfo(filename, fields=None, types=None, arities=None, fillvalues=None, converters=None):
+def fromvcfinfo(filename, fields=None, types=None, arities=None, fillvalues=None, converters=None, progress=None):
     """
     Load a numpy structured array from data in the fixed and INFO
     fields of a Variant Call Format (VCF) file.
@@ -191,7 +193,7 @@ def fromvcfinfo(filename, fields=None, types=None, arities=None, fillvalues=None
             dtype.append((f, t, (n,)))
     
     # set up an iterator over the VCF records
-    it = _itervcfinfo(vcf_reader, fields, arities, fillvalues, converters)
+    it = _itervcfinfo(vcf_reader, fields, arities, fillvalues, converters, progress)
 
     # build an array from the iterator
     a = np.fromiter(it, dtype=dtype)
@@ -199,8 +201,10 @@ def fromvcfinfo(filename, fields=None, types=None, arities=None, fillvalues=None
     return a
 
 
-def _itervcfinfo(vcf_reader, fields, arities, fillvalues, converters):
-    for rec in vcf_reader:
+def _itervcfinfo(vcf_reader, fields, arities, fillvalues, converters, progress):
+    for i, rec in enumerate(vcf_reader):
+        if progress is not None and i > 0 and i % progress == 0:
+            logging.info([i, rec.CHROM, rec.POS])
         yield tuple(_mkival(rec, f, arities[f], fillvalues[f], converters[f]) for f in fields)
 
 
@@ -250,7 +254,7 @@ def _mkval(val, num, fill, conv):
     return val
 
 
-def fromvcfcalldata(filename, samples=None, fields=None, types=None, arities=None, fillvalues=None, converters=None):   
+def fromvcfcalldata(filename, samples=None, fields=None, types=None, arities=None, fillvalues=None, converters=None, progress=None):   
     """
     Load a numpy structured array from data in the sample columns of a
     Variant Call Format (VCF) file.
@@ -373,7 +377,7 @@ def fromvcfcalldata(filename, samples=None, fields=None, types=None, arities=Non
     dtype = [(s, cell_dtype) for s in samples]
     
     # set up iterator
-    it = _itervcfcalldata(vcf_reader, samples, fields, arities, fillvalues, converters)
+    it = _itervcfcalldata(vcf_reader, samples, fields, arities, fillvalues, converters, progress)
 
     # build an array from the iterator
     a = np.fromiter(it, dtype=dtype)
@@ -381,8 +385,10 @@ def fromvcfcalldata(filename, samples=None, fields=None, types=None, arities=Non
     return a
 
 
-def _itervcfcalldata(vcf_reader, samples, fields, arities, fillvalues, converters):
-    for rec in vcf_reader:
+def _itervcfcalldata(vcf_reader, samples, fields, arities, fillvalues, converters, progress):
+    for i, rec in enumerate(vcf_reader):
+        if progress is not None and i > 0 and i % progress == 0:
+            logging.info([i, rec.CHROM, rec.POS])
         out = tuple(_mkcvals(rec.genotype(s), fields, arities, fillvalues, converters) 
                     for s in samples)
         yield out
