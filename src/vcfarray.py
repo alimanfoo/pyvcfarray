@@ -31,7 +31,8 @@ DEFAULT_FILLVALUES = {VCF_TYPE_INTEGER: 0,
 
 # attributes of PyVCF variant records, including VCF fixed fields
 VARIANT_ATTRIBUTES = ('CHROM', 'POS', 'ID', 'REF', 'ALT', 'QUAL', 'FILTER',
-                      'is_snp', 'is_indel', 'is_deletion', 'is_transition')
+                      'is_snp', 'is_indel', 'is_deletion', 'is_transition',
+                      'num_called', 'num_unknown', 'call_rate')
 
 
 # default numpy dtypes to use for VCF fixed fields and other variant attributes 
@@ -60,6 +61,17 @@ SPECIAL_VARIANT_ATTRIBUTES = {
         'fillvalue': 0
         }
     }
+
+
+# attributes of PyVCF variant records, including VCF fixed fields
+CALL_ATTRIBUTES = ('called', 'gt_type', 'is_het', 'is_variant')
+
+
+# default numpy dtypes to use for VCF fixed fields and other variant attributes 
+DEFAULT_CALL_ATTRIBUTE_DTYPES = {'called': 'b1',
+                                 'gt_type': 'u1',
+                                 'is_het': 'b1',
+                                 'is_variant': 'b1'}
 
 
 def fromvcfinfo(filename, fields=None, types=None, arities=None, fillvalues=None, converters=None):
@@ -130,7 +142,7 @@ def fromvcfinfo(filename, fields=None, types=None, arities=None, fillvalues=None
     for f in fields:
         if f not in arities:
             if f in VARIANT_ATTRIBUTES:
-                arities[f] = 1 # expect only one value
+                n = 1 # expect only one value
             elif f in vcf_reader.infos:
                 vcf_n = vcf_reader.infos[f].num
                 if vcf_n > 1:
@@ -220,6 +232,8 @@ def _mkval(val, num, fill, conv):
         if val is not None:
             if len(val) >= num:
                 val = tuple(val[:num]) # pick off as many values as requested
+                # fill missing
+                val = tuple(v if v is not None else fill for v in val)
             else:
                 val = tuple(list(val) + [fill] * (num-len(val))) # fill in any missing
         else:
@@ -281,20 +295,28 @@ def fromvcfcalldata(filename, samples=None, fields=None, types=None, arities=Non
 
     # determine fields to use
     if fields is None:
+        # use all Call attributes
+        fields = list(CALL_ATTRIBUTES)
         # use all format fields
-        fields = list(vcf_reader.formats.keys())
+        fields.extend(vcf_reader.formats.keys())
     else:
         # check all requested fields are available
         for f in fields:
-            assert f in vcf_reader.formats.keys(), 'bad field name: %s' % f
+            assert f in CALL_ATTRIBUTES or f in vcf_reader.formats.keys(), 'bad field name: %s' % f
         
     # determine a numpy dtype to use for each field
     if types is None:
         types = dict()
     for f in fields:
         if f not in types:
-            vcf_t = vcf_reader.formats[f].type
-            t = DEFAULT_DTYPES[vcf_t]
+            if f in CALL_ATTRIBUTES:
+                t = DEFAULT_CALL_ATTRIBUTE_DTYPES[f]
+            elif f in vcf_reader.formats:
+                vcf_t = vcf_reader.formats[f].type
+                t = DEFAULT_DTYPES[vcf_t]
+            else:
+                # should never be reached
+                raise Exception('count not determine dtype for field: %s' % f)
             types[f] = t
     
     # determine expected arity for each field
@@ -302,11 +324,17 @@ def fromvcfcalldata(filename, samples=None, fields=None, types=None, arities=Non
         arities = dict()
     for f in fields:
         if f not in arities:
-            vcf_n = vcf_reader.formats[f].num
-            if vcf_n > 1:
-                n = vcf_n
+            if f in CALL_ATTRIBUTES:
+                n = 1 # same arity for all attributes
+            elif f in vcf_reader.formats:
+                vcf_n = vcf_reader.formats[f].num
+                if vcf_n > 1:
+                    n = vcf_n
+                else:
+                    n = 1 # fall back to expecting one value
             else:
-                n = 1 # fall back to expecting one value
+                # should never be reached
+                raise Exception('count not determine arity for field: %s' % f)
             arities[f] = n
     
     # decide what fill values to use for each field if value is missing
@@ -314,8 +342,14 @@ def fromvcfcalldata(filename, samples=None, fields=None, types=None, arities=Non
         fillvalues = dict()
     for f in fields:
         if f not in fillvalues:
-            vcf_t = vcf_reader.formats[f].type
-            v = DEFAULT_FILLVALUES[vcf_t]
+            if f in CALL_ATTRIBUTES:
+                v = 0 # same fill value for all attributes
+            elif f in vcf_reader.formats:
+                vcf_t = vcf_reader.formats[f].type
+                v = DEFAULT_FILLVALUES[vcf_t]
+            else:
+                # should never be reached
+                raise Exception('count not determine fill value for field: %s' % f)
             fillvalues[f] = v
             
     # pad out converters
@@ -349,11 +383,26 @@ def fromvcfcalldata(filename, samples=None, fields=None, types=None, arities=Non
 
 def _itervcfcalldata(vcf_reader, samples, fields, arities, fillvalues, converters):
     for rec in vcf_reader:
-        yield tuple(_mkcvals(rec.genotype(s), fields, arities, fillvalues, converters) for s in samples)
+        out = tuple(_mkcvals(rec.genotype(s), fields, arities, fillvalues, converters) 
+                    for s in samples)
+        yield out
     
     
 def _mkcvals(call, fields, arities, fillvalues, converters):
-    return tuple(_mkval(call[f], arities[f], fillvalues[f], converters[f]) for f in fields)
+    return tuple(_mkcval(call, f, arities[f], fillvalues[f], converters[f]) for f in fields)
+
+
+def _mkcval(call, f, num, fill, conv):
+    if f in CALL_ATTRIBUTES:
+        val = getattr(call, f)
+        val = _mkval(val, num, fill, conv)
+    else:
+        try:
+            val = call[f]
+            val = _mkval(val, num, fill, conv)
+        except AttributeError:
+            val = fill
+    return val   
 
 
 def view2d(a):
