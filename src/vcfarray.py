@@ -1,10 +1,10 @@
-VERSION = '0.6'
+VERSION = '0.7'
 
 
 import vcf
 import numpy as np
 import logging
-logging.basicConfig(format='%(asctime)s %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
 
 
 # VCF types
