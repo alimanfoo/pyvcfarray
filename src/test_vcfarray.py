@@ -21,7 +21,12 @@ def test_fromvcfinfo_default():
     eq_('G', a.REF[0])
     eq_('A', a.ALT[0])
     eq_(29, a.QUAL[0])
-    eq_('', a.FILTER[0]) # PASS is empty list in PyVCF
+
+    # check FILTER field
+    eq_(True, a.FILTER.PASS[0])
+    eq_(False, a.FILTER.PASS[1])
+    eq_(False, a.FILTER.q10[0])
+    eq_(True, a.FILTER.q10[1])
     
     # check other attributes
     eq_(True, a.is_snp[0])
@@ -44,6 +49,7 @@ def test_fromvcfinfo_default():
     eq_(True, a.H2[0])
 
     
+
 def test_fromvcfinfo_override_fields():
 
     # default array
@@ -95,4 +101,7 @@ def test_fromvcfcalldata_view2d():
     eq_(False, a.is_het[0,0])
     eq_(False, a.is_variant[0,0])
 
+
+
     
+

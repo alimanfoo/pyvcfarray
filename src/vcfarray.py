@@ -1,4 +1,4 @@
-VERSION = '0.7'
+VERSION = '0.8'
 
 
 import vcf
@@ -44,7 +44,7 @@ DEFAULT_VARIANT_ATTRIBUTE_DTYPES = {'CHROM': 'a20',
                                     'REF': 'a20',
                                     'ALT': 'a20',
                                     'QUAL': 'f4',
-                                    'FILTER': 'a20',
+#                                    'FILTER': 'a20',
                                     'is_snp': 'b1', 
                                     'is_indel': 'b1', 
                                     'is_deletion': 'b1', 
@@ -119,7 +119,9 @@ def fromvcfinfo(filename, fields=None, types=None, arities=None, fillvalues=None
     else:
         # check all requested fields are available
         for f in fields:
-            assert f in VARIANT_ATTRIBUTES or f in vcf_reader.infos.keys() or f in SPECIAL_VARIANT_ATTRIBUTES.keys(), 'bad field name: %s' % f
+            assert (f in VARIANT_ATTRIBUTES 
+                    or f in vcf_reader.infos.keys()
+                    or f in SPECIAL_VARIANT_ATTRIBUTES.keys()), 'bad field name: %s' % f
         
     # determine a numpy dtype to use for each field
     if types is None:
@@ -127,7 +129,12 @@ def fromvcfinfo(filename, fields=None, types=None, arities=None, fillvalues=None
     for f in fields:
         if f not in types:
             if f in VARIANT_ATTRIBUTES:
-                t = DEFAULT_VARIANT_ATTRIBUTE_DTYPES[f]
+                if f == 'FILTER':
+                    t = [('PASS', 'b1')]
+                    for flt in sorted(vcf_reader.filters.keys()):
+                        t.append((flt, 'b1'))
+                else:
+                    t = DEFAULT_VARIANT_ATTRIBUTE_DTYPES[f]
             elif f in vcf_reader.infos:
                 vcf_t = vcf_reader.infos[f].type
                 t = DEFAULT_DTYPES[vcf_t]
@@ -193,7 +200,7 @@ def fromvcfinfo(filename, fields=None, types=None, arities=None, fillvalues=None
             dtype.append((f, t, (n,)))
     
     # set up an iterator over the VCF records
-    it = _itervcfinfo(vcf_reader, fields, arities, fillvalues, converters, progress)
+    it = _itervcfinfo(vcf_reader, fields, arities, fillvalues, converters, progress, sorted(vcf_reader.filters.keys()))
 
     # build an array from the iterator
     a = np.fromiter(it, dtype=dtype)
@@ -201,21 +208,24 @@ def fromvcfinfo(filename, fields=None, types=None, arities=None, fillvalues=None
     return a
 
 
-def _itervcfinfo(vcf_reader, fields, arities, fillvalues, converters, progress):
+def _itervcfinfo(vcf_reader, fields, arities, fillvalues, converters, progress, filters):
     for i, rec in enumerate(vcf_reader):
         if progress is not None and i > 0 and i % progress == 0:
             logging.info([i, rec.CHROM, rec.POS])
-        yield tuple(_mkival(rec, f, arities[f], fillvalues[f], converters[f]) for f in fields)
+        yield tuple(_mkival(rec, f, arities[f], fillvalues[f], converters[f], filters) for f in fields)
 
 
-def _mkival(rec, f, num, fill, conv):
+def _mkival(rec, f, num, fill, conv, filters):
     if f in VARIANT_ATTRIBUTES:
         val = getattr(rec, f)
         if conv is not None: # user-provided value converter
             val = conv(val)
-        # special case ALT and FILTER because of variable length
-        elif f in {'ALT', 'FILTER'}:
+        # special case ALT
+        elif f == 'ALT':
             val = ','.join(map(str, val))
+        elif f == 'FILTER':
+            f_pass = len(val) == 0
+            val = tuple([f_pass] + [(flt in val) for flt in filters])            
         elif val is None:
             val = fill
     elif f in rec.INFO:
@@ -424,3 +434,4 @@ def view2d(a):
     b = a.view(dtype).reshape(rows, cols)
     return b
     
+
