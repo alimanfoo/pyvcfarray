@@ -19,7 +19,7 @@ setup(
     py_modules=['vcfarray'],
     url='https://github.com/alimanfoo/pyvcfarray',
     license='MIT License',
-    description='Python utility functions for loading data from Variant Call Format (VCF) files into numpy arrays.',
+    description='Please note, development of this package has moved to https://github.com/alimanfoo/vcfnp',
     classifiers=['Intended Audience :: Developers',
                  'License :: OSI Approved :: MIT License',
                  'Programming Language :: Python',
